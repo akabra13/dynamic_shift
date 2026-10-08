@@ -30,13 +30,18 @@ def _dirichlet_multinomial_log_pred(alpha: np.ndarray, counts: np.ndarray) -> fl
     constant for every run length at a given t, so it cancels when the
     BOCPD recursion renormalises P(r_t | x_1:t) and can be safely left
     out.
+
+    A category with alpha_i = 0 (impossible under this prior -- real team
+    chains have these for transitions the team never makes) must also have
+    counts_i = 0, and that term's correct contribution is log(1) = 0, not
+    the gammaln(0) - gammaln(0) = NaN that falls out of the formula below
+    applied blindly.
     """
     a0 = alpha.sum()
     n = counts.sum()
-    return float(
-        gammaln(a0) - gammaln(a0 + n)
-        + np.sum(gammaln(alpha + counts) - gammaln(alpha))
-    )
+    support = alpha > 0
+    per_category = gammaln(alpha[support] + counts[support]) - gammaln(alpha[support])
+    return float(gammaln(a0) - gammaln(a0 + n) + per_category.sum())
 
 
 @dataclass

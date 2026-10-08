@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from turningpoint.monitor import DirichletMultinomialBOCPD
 
@@ -49,6 +50,18 @@ def test_no_change_point_in_stationary_sequence():
     # With no injected change, the run length should have grown close to
     # the full sequence length rather than resetting.
     assert detector.map_run_length() > 40
+
+
+def test_zero_prior_categories_with_zero_counts_dont_produce_nan():
+    """Real team chains have exact-zero entries (transitions the team
+    never makes); those categories must contribute 0 to the log-pred, not
+    NaN from gammaln(0) - gammaln(0), as long as they're never observed."""
+    prior_alpha = np.array([5.0, 0.0, 3.0])  # category 1 has zero support
+    detector = DirichletMultinomialBOCPD(prior_alpha=prior_alpha, hazard=20.0)
+
+    probs = detector.update(np.array([2.0, 0.0, 1.0]))
+    assert np.all(np.isfinite(probs))
+    assert probs.sum() == pytest.approx(1.0)
 
 
 def test_streaming_matches_batch_replay():
