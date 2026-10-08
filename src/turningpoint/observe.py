@@ -69,3 +69,16 @@ def match_possession_counts(events: pl.LazyFrame, team_id: int,
         np.add.at(counts, idx, 1.0)
         result.append((int(poss), counts))
     return result
+
+
+def possession_minutes(events: pl.LazyFrame, team_id: int) -> dict[int, float]:
+    """Each of `team_id`'s possessions' start minute (its first open-play
+    action's minute + second/60), for mapping a ground-truth event's clock
+    time onto a possession index in `match_possession_counts`'s output."""
+    act = classify_actions(events, open_play_only=True).filter(pl.col("team_id") == team_id)
+    first = (act.sort("idx")
+                .group_by("possession", maintain_order=True)
+                .agg(pl.first("minute").alias("minute"), pl.first("second").alias("second"))
+                .collect())
+    return {int(r["possession"]): r["minute"] + r["second"] / 60.0
+            for r in first.iter_rows(named=True)}

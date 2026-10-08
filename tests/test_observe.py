@@ -7,16 +7,17 @@ import pytest
 from pitchgraph.chains.grid import Grid
 from pitchgraph.chains.team import Chain
 
-from turningpoint.observe import categories, chain_prior_alpha, match_possession_counts
+from turningpoint.observe import categories, chain_prior_alpha, match_possession_counts, possession_minutes
 
 
 def _ev(idx, typ, x, y=40.0, end_x=None, outcome=None, xg=None, sub_type=None,
-        team=1, poss=1, pattern="Regular Play"):
+        team=1, poss=1, pattern="Regular Play", minute=0, second=0.0):
     return {"match_id": 1, "event_id": f"e{poss}-{idx}", "idx": idx, "period": 1,
             "period_seconds": float(idx), "type": typ, "team_id": team,
             "possession": poss, "possession_team_id": team, "play_pattern": pattern,
             "x": x, "y": y, "end_x": end_x, "end_y": y if end_x is not None else None,
-            "outcome": outcome, "xg": xg, "sub_type": sub_type}
+            "outcome": outcome, "xg": xg, "sub_type": sub_type,
+            "minute": minute, "second": second}
 
 
 def _frame(rows):
@@ -93,3 +94,14 @@ def test_possession_counts_feed_directly_into_the_bocpd_detector():
     for _, counts in result:
         probs = detector.update(counts)
         assert probs.sum() == pytest.approx(1.0)
+
+
+def test_possession_minutes_uses_each_possessions_first_action():
+    grid = _two_zone_grid()
+    ev = _frame([
+        _ev(1, "Pass", 30, end_x=90, poss=1, minute=10, second=0.0),
+        _ev(2, "Shot", 100, xg=0.3, poss=1, minute=10, second=30.0),  # same possession, later
+        _ev(3, "Pass", 20, end_x=90, poss=2, minute=11, second=15.0),
+    ])
+    minutes = possession_minutes(ev, team_id=1)
+    assert minutes == {1: pytest.approx(10.0), 2: pytest.approx(11.25)}
