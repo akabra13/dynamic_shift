@@ -6,25 +6,36 @@ Second project in the PitchGraph programme (after [pitchgraph](https://github.co
 
 **Honest scope:** open data is historical, so "live" means the detector is *online* — each decision at time t uses only events up to t. A replay of a past match is then faithful to what a live feed would have seen, and `streaming == batch` is enforced by a test.
 
-## Status (2026-10-08)
+## Status (2026-10-09)
 
-The pitchgraph Drive lake and Library are built (all 80 competition-seasons, 13.9M events; 23 competition-seasons in the Library with fitted team chains), and the lake now carries StatsBomb's `tactics` payload (formation + lineup), which the ground-truth classification below needs.
+The pitchgraph Drive lake and Library are built (all 80 competition-seasons, 13.9M events), and the lake carries StatsBomb's `tactics` payload (formation + lineup), which ground-truth classification needs. A full, label-free-calibrated validation pipeline now runs end-to-end against real lake data via GitHub Actions (`.github/workflows/validate.yml` → `scripts/run_validation.py`).
 
 | Piece | State |
 |---|---|
-| `monitor.py` — Bayesian online change-point detection (Adams & MacKay) over a Dirichlet-multinomial observation model | **Implemented, tested** (3 synthetic-data tests: detects an injected change, stays stable with none, streaming == batch; 1 regression test for a zero-prior-category NaN found while wiring observe.py) |
-| `observe.py` — possession → observation vector, plus possession → clock-time lookup | **Implemented, tested.** Flattens possessions into pitchgraph's TACTICAL grid (start zone, outcome) vocabulary — the same layout `pitchgraph.chains.counts.outcome_table` uses — so a team's already-fitted v3 shrunk chain (`chains.team.Chain.P`) plugs directly in as the Dirichlet prior with no leakage |
-| `nulls.py` — permutation null for threshold calibration | Implemented, tested on synthetic data; still needs real possession sequences to calibrate for real |
-| `describe.py` — before/after possession counts → plain-English sentences | **Implemented, tested.** Lane-share shifts, shots-per-possession, biggest zone-to-zone edge shift. Threat is approximated by shots/possession, not true xG — see the module's scope note |
-| `attribute.py` — candidate preceding events | **Partially implemented, tested.** `candidate_events()` pulls subs/cards/goals/half-time/tactical-shift markers for both teams from the lake; `rank_candidate_causes()` currently ranks by temporal proximity only — a placeholder until real likelihood ratios are learned from the validation run below |
-| `ground_truth.py` — positive/negative controls | **Implemented, tested.** Classifies Tactical Shift events as real formation changes vs same-formation (using the `tactics` payload), finds red cards, checks for a nearby substitution. "Like-for-like subs" (also a negative control in the design doc) isn't done yet — needs lineup position data |
-| `validate.py` — leave-one-match-out detection check | **Implemented, tested** on a hand-constructed scenario (stable training matches, a held-out match with an injected shift) — not yet run against real lake data (see below) |
-| `export.py` | Still a stub — needs a decision on the match-JSON schema the (not-yet-built) Library timeline page will consume |
-| Real validation run across the lake | **Not run yet.** Needs this repo's own Drive access (`GDRIVE_OAUTH_TOKEN`/`GDRIVE_FOLDER_ID` secrets, same setup as pitchgraph's `docs/github_actions_drive_setup.md`) and a GitHub Actions workflow mirroring pitchgraph's `ingest.yml`/`library.yml` pattern |
+| `monitor.py` — Bayesian online change-point detection (Adams & MacKay) over a Dirichlet-multinomial observation model | **Implemented, tested.** Vectorized over run hypotheses and touched categories (~21ms/match vs the original ~440ms), and fixed a real semantic bug: a possession touching a category the prior assigns zero probability to now correctly rules that run-length hypothesis out, rather than being silently ignored |
+| `observe.py` | **Implemented, tested.** `chain_prior_alpha` now has a floor pseudo-count so one rare unseen move doesn't trip the above impossibility on its own; `match_possession_counts` carries each possession's period, needed for half-preserving shuffles |
+| `nulls.py` — permutation null for threshold calibration | **Implemented, tested**, and now actually used: shuffles within halves (never crossing half-time), scores once per permutation, sweeps thresholds cheaply over the already-computed trajectories |
+| `describe.py` | Implemented, tested. Lane-share shifts, shots-per-possession, biggest zone-to-zone edge shift. Threat is approximated by shots/possession, not true xG — see the module's scope note |
+| `attribute.py` | Partially implemented, tested. `candidate_events()` is real; `rank_candidate_causes()` is still a temporal-proximity placeholder |
+| `ground_truth.py` | Implemented, tested. Carries possession numbers (not just clock minutes) so controls align correctly with the detector's possession-indexed output |
+| `validate.py` | **Implemented, tested**, rewritten around `score_match` (run the detector once per team-match) + `alarms` (burn-in + refractory, not "every possession above threshold") + possession-number alignment |
+| `export.py` | Still a stub |
+
+## Real validation result (2026-10-09)
+
+First full real-data run, FA WSL 2018/19 (key `37_4`), 214 team-matches, hyperparameters fixed *before* seeing any result (hazard=100, prior_strength=10, burn_in=10, refractory=5, change_point_window=5, within_possessions=15, 20 permutations/match):
+
+- **The permutation null never got under the 0.25-false-alarm-per-match target** — even at the most conservative threshold tried (0.95), the null rate was 0.367. The threshold grid should extend closer to 1.0 to find where it actually crosses target; this wasn't done yet.
+- At that threshold, detection rates for all four control classes are low and **statistically indistinguishable**: real formation changes 2.4% (90% CI 0–7.3%, n=37 matches), same-formation shifts 7.7% (CI 3.7–12.5%, n=96), red cards 0% (n=3, too few to read anything into), and — tellingly — **random time points with no claimed significance at all detect at 5.1%** (CI 3.3–7%, n=214), overlapping every other bucket.
+- **Reading this plainly: at this observation granularity, the detector shows no demonstrated ability to tell a real tactical change from an arbitrary moment in the match.** This is a real result, not a pipeline bug — the code was checked at every step (unit tests on hand-traceable data, a timing benchmark, a smoke test on a synthetic lake) before trusting it on real data.
+- Leading hypothesis: the 960-category (30 zones × 32 outcomes) vocabulary is too sparse. A possession has ~5 actions on average, so each one barely populates the space the Dirichlet-multinomial has to reason over — there may just not be enough evidence per possession for BOCPD to separate signal from noise at this resolution.
+- **Not yet run:** the full eligible lake (only one competition-season so far), and an ablation to a coarser observation vocabulary (e.g. thirds × lanes, ~15 zones) to test the sparsity hypothesis directly.
+
+Raw numbers: `validation_results.json`, uploaded as a workflow artifact on every `validate.yml` run.
 
 ## Scope note on the detector as implemented
 
-The design doc models each zone row as its own conditional multinomial (a full team chain). What's implemented and tested here is a flattened version: one Dirichlet-multinomial over all (zone, outcome) categories together (960 categories: 30 zones × 32 outcomes). This is an honest simplification, not the final per-row conditional model the design doc describes — that's the natural refinement once this flattened version has been validated against real matches.
+The design doc models each zone row as its own conditional multinomial (a full team chain). What's implemented and tested here is a flattened version: one Dirichlet-multinomial over all (zone, outcome) categories together. This is an honest simplification, not the final per-row conditional model the design doc describes.
 
 ## Design
 
