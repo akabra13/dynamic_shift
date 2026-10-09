@@ -48,6 +48,21 @@ Before tuning the detector further, `scripts/run_signal_check.py` asked a simple
 - Real formation changes are separated from random only by ~0.008 TV (~2.6% relative), AUC 0.53. A faint real effect, far too small to detect on any single event. Shot rate, turnover rate and actions per possession show nothing (AUC 0.50-0.52).
 - **Conclusion:** in-possession ball movement carries almost no per-event signal of a formation change, at either 960 or 15 categories. The vocabulary was not the main problem; the observable is. Next: out-of-possession shape from StatsBomb 360 freeze-frames. Tuning the BOCPD vocabulary further is not justified.
 
+## 360 shape check (2026-10-09)
+
+Same question, now with team shape from StatsBomb 360 freeze-frames (`scripts/run_shape_check.py`, `shape.py`): visible outfield players of the team, mirrored to its attack direction, averaged over the 5 minutes before vs after each event inside one half, split by phase. 12 competition-seasons with 360 data (Euros 2020/2024, World Cups, Women's Euro 2022/2025, La Liga 2020/21, Ligue 1, Bundesliga 2023/24, MLS, AFCON), 834 team-matches. Primary statistic fixed in advance: |change| in out-of-possession depth relative to the ball.
+
+| Class (primary stat) | n | mean abs change | AUC vs random |
+|---|---|---|---|
+| random moments | 3,450 | 4.26 | - |
+| same-formation shift | 662 | 4.55 | 0.529 |
+| real formation change | 287 | 4.23 | 0.505 |
+| red card | 18 | 4.90 | 0.570 |
+
+- Across all 8 shape statistics (depth, depth relative to ball, width, compactness; in and out of possession) real formation changes sit at AUC 0.49-0.55, indistinguishable from same-formation shifts and random moments.
+- The noise floor is large: a random 5-minute split already moves mean block depth by ~10.6 pitch units, because freeze-frames only contain the players the camera sees.
+- **Conclusion:** neither in-possession ball movement nor crude 360 shape separates a labelled formation change from an arbitrary moment. Either StatsBomb "formation change" labels rarely correspond to a change that is visible at this resolution, or the crude features cannot see it. A better test would need player identities in the frames (not provided) to compare role-specific positions.
+
 ## Scope note on the detector as implemented
 
 The design doc models each zone row as its own conditional multinomial (a full team chain). What's implemented and tested here is a flattened version: one Dirichlet-multinomial over all (zone, outcome) categories together. This is an honest simplification, not the final per-row conditional model the design doc describes.
