@@ -33,6 +33,21 @@ First full real-data run, FA WSL 2018/19 (key `37_4`), 214 team-matches, hyperpa
 
 Raw numbers: `validation_results.json`, uploaded as a workflow artifact on every `validate.yml` run.
 
+## Model-free signal check (2026-10-09, full lake)
+
+Before tuning the detector further, `scripts/run_signal_check.py` asked a simpler question with no change-point model: does the 15 possessions after a real tactical change differ from the 15 before more than at an arbitrary moment? Coarse vocabulary (thirds x lanes = 15 destination cells), primary statistic fixed in advance (total-variation distance of the destination distribution). 80 competition-seasons, windows kept inside one half.
+
+| Class | n | mean TV | AUC vs random |
+|---|---|---|---|
+| random moments | 12,995 | 0.3153 | - |
+| same-formation shift (negative control) | 2,147 | 0.3152 | 0.499 |
+| real formation change | 866 | 0.3236 | 0.527 |
+| red card | 60 | 0.3311 | 0.550 |
+
+- The negative control sits exactly on the random baseline, so the check itself is clean.
+- Real formation changes are separated from random only by ~0.008 TV (~2.6% relative), AUC 0.53. A faint real effect, far too small to detect on any single event. Shot rate, turnover rate and actions per possession show nothing (AUC 0.50-0.52).
+- **Conclusion:** in-possession ball movement carries almost no per-event signal of a formation change, at either 960 or 15 categories. The vocabulary was not the main problem; the observable is. Next: out-of-possession shape from StatsBomb 360 freeze-frames. Tuning the BOCPD vocabulary further is not justified.
+
 ## Scope note on the detector as implemented
 
 The design doc models each zone row as its own conditional multinomial (a full team chain). What's implemented and tested here is a flattened version: one Dirichlet-multinomial over all (zone, outcome) categories together. This is an honest simplification, not the final per-row conditional model the design doc describes.
