@@ -30,26 +30,11 @@ from pitchgraph.library.build import eligible_seasons  # noqa: E402
 
 from dynamic_shift.ground_truth import red_cards, tactical_shifts  # noqa: E402
 from dynamic_shift.observe import match_possession_counts  # noqa: E402
-from dynamic_shift.signal_check import STAT_NAMES, auc_vs_baseline, event_index, window_stat  # noqa: E402
+from dynamic_shift.signal_check import STAT_NAMES, auc_vs_baseline, boot_ci, event_index, window_stat  # noqa: E402
 
 WINDOW = 15
 RANDOM_POINTS_PER_MATCH = 5
-N_BOOT = 1000
 LABELS = ("real_formation_change", "same_formation", "red_card", "random")
-
-
-def boot_ci(per_match: list[np.ndarray], rng: np.random.Generator) -> tuple[float, float, float]:
-    """Mean of all event values, 90% CI resampling whole team-matches."""
-    pooled = np.concatenate(per_match) if per_match else np.array([])
-    if len(pooled) == 0:
-        return float("nan"), float("nan"), float("nan")
-    sums = np.array([a.sum() for a in per_match])
-    cnts = np.array([len(a) for a in per_match], dtype=float)
-    ms = []
-    for _ in range(N_BOOT):
-        idx = rng.integers(0, len(per_match), len(per_match))
-        ms.append(sums[idx].sum() / max(cnts[idx].sum(), 1))
-    return float(pooled.mean()), float(np.percentile(ms, 5)), float(np.percentile(ms, 95))
 
 
 if __name__ == "__main__":

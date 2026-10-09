@@ -98,3 +98,17 @@ def auc_vs_baseline(values: np.ndarray, baseline: np.ndarray) -> float:
     gt = (values[:, None] > baseline[None, :]).mean()
     eq = (values[:, None] == baseline[None, :]).mean()
     return float(gt + 0.5 * eq)
+
+
+def boot_ci(per_match: list[np.ndarray], rng: np.random.Generator, n_boot: int = 1000) -> tuple[float, float, float]:
+    """Mean of all event values, 90% CI resampling whole team-matches."""
+    pooled = np.concatenate(per_match) if per_match else np.array([])
+    if len(pooled) == 0:
+        return float("nan"), float("nan"), float("nan")
+    sums = np.array([a.sum() for a in per_match])
+    cnts = np.array([len(a) for a in per_match], dtype=float)
+    ms = []
+    for _ in range(n_boot):
+        idx = rng.integers(0, len(per_match), len(per_match))
+        ms.append(sums[idx].sum() / max(cnts[idx].sum(), 1))
+    return float(pooled.mean()), float(np.percentile(ms, 5)), float(np.percentile(ms, 95))
