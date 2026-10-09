@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from turningpoint.monitor import DirichletMultinomialBOCPD
+from dynamic_shift.monitor import DirichletMultinomialBOCPD
 
 
 def permutation_false_alarm_rate(

@@ -4,7 +4,7 @@ import pytest
 
 from pitchgraph.chains.grid import TACTICAL, Grid
 
-from turningpoint.describe import (
+from dynamic_shift.describe import (
     describe_change, lane_shares, shots_per_possession, top_edge_shifts, zone_lane,
 )
 

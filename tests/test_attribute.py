@@ -4,7 +4,7 @@ import json
 import polars as pl
 import pytest
 
-from turningpoint.attribute import candidate_events, rank_candidate_causes
+from dynamic_shift.attribute import candidate_events, rank_candidate_causes
 
 
 def _ev(typ, minute, second=0.0, team="Home", team_id=1, player=None,

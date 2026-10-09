@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from turningpoint.monitor import DirichletMultinomialBOCPD
+from dynamic_shift.monitor import DirichletMultinomialBOCPD
 
 
 def _sample_sequence(rng, p, n_obs, counts_per_obs=5):

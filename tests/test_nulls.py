@@ -1,6 +1,6 @@
 import numpy as np
 
-from turningpoint.nulls import permutation_false_alarm_rate
+from dynamic_shift.nulls import permutation_false_alarm_rate
 
 
 def test_false_alarm_rate_is_finite_and_bounded():

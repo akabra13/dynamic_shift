@@ -22,8 +22,8 @@ from pitchgraph.chains.counts import CountStore
 from pitchgraph.chains.grid import TACTICAL, Grid
 from pitchgraph.chains.team import Chain, league_chain, shrunk_chain
 
-from turningpoint.monitor import DirichletMultinomialBOCPD
-from turningpoint.observe import chain_prior_alpha, match_possession_counts, possession_minutes
+from dynamic_shift.monitor import DirichletMultinomialBOCPD
+from dynamic_shift.observe import chain_prior_alpha, match_possession_counts, possession_minutes
 
 
 def leave_one_out_prior(store: CountStore, team_id: int, exclude_match: int,

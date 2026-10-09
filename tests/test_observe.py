@@ -7,7 +7,7 @@ import pytest
 from pitchgraph.chains.grid import Grid
 from pitchgraph.chains.team import Chain
 
-from turningpoint.observe import categories, chain_prior_alpha, match_possession_counts, possession_minutes
+from dynamic_shift.observe import categories, chain_prior_alpha, match_possession_counts, possession_minutes
 
 
 def _ev(idx, typ, x, y=40.0, end_x=None, outcome=None, xg=None, sub_type=None,
@@ -79,7 +79,7 @@ def test_match_possession_counts_on_hand_traceable_possessions():
 def test_possession_counts_feed_directly_into_the_bocpd_detector():
     """End-to-end: a team's chain seeds the prior, and a possession's counts
     are a valid observation for DirichletMultinomialBOCPD.update()."""
-    from turningpoint.monitor import DirichletMultinomialBOCPD
+    from dynamic_shift.monitor import DirichletMultinomialBOCPD
 
     grid = _two_zone_grid()
     P = np.array([[0.1, 0.5, 0.2, 0.2],

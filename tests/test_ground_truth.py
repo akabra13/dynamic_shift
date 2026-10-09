@@ -3,7 +3,7 @@ import json
 
 import polars as pl
 
-from turningpoint.ground_truth import had_substitution_within, red_cards, tactical_shifts
+from dynamic_shift.ground_truth import had_substitution_within, red_cards, tactical_shifts
 
 
 def _ev(typ, minute, second=0.0, team_id=1, extra=None):

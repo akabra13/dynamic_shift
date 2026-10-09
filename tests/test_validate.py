@@ -6,7 +6,7 @@ import pytest
 from pitchgraph.chains.counts import CountStore
 from pitchgraph.chains.grid import Grid
 
-from turningpoint.validate import detect_within, leave_one_out_prior
+from dynamic_shift.validate import detect_within, leave_one_out_prior
 
 GRID = Grid.uniform(2, 1)  # zone 0: x<60, zone 1: x>=60
 
