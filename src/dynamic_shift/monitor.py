@@ -13,6 +13,12 @@ synthetic data. The per-zone-row conditional version described in the
 design doc is the natural refinement once real possession sequences are
 flowing from the Drive lake (observe.py), since that needs the v3 team
 chain as the prior and the actual zone/outcome vocabulary.
+
+Vectorized over run hypotheses and over only the categories a possession
+actually touches (typically ~5 of 960), rather than one Python-level
+call per run over the full category vector -- the naive version took
+~440ms for a 90-possession match, which doesn't scale to validating
+across the whole lake.
 """
 from __future__ import annotations
 
@@ -20,28 +26,6 @@ from dataclasses import dataclass
 
 import numpy as np
 from scipy.special import gammaln
-
-
-def _dirichlet_multinomial_log_pred(alpha: np.ndarray, counts: np.ndarray) -> float:
-    """Log predictive probability of `counts` under Dirichlet(alpha).
-
-    This is the Dirichlet-multinomial (multivariate Polya) log-pmf with
-    the counts' own multinomial coefficient dropped: it is the same
-    constant for every run length at a given t, so it cancels when the
-    BOCPD recursion renormalises P(r_t | x_1:t) and can be safely left
-    out.
-
-    A category with alpha_i = 0 (impossible under this prior -- real team
-    chains have these for transitions the team never makes) must also have
-    counts_i = 0, and that term's correct contribution is log(1) = 0, not
-    the gammaln(0) - gammaln(0) = NaN that falls out of the formula below
-    applied blindly.
-    """
-    a0 = alpha.sum()
-    n = counts.sum()
-    support = alpha > 0
-    per_category = gammaln(alpha[support] + counts[support]) - gammaln(alpha[support])
-    return float(gammaln(a0) - gammaln(a0 + n) + per_category.sum())
 
 
 @dataclass
@@ -67,7 +51,11 @@ class DirichletMultinomialBOCPD:
     def __post_init__(self) -> None:
         self.prior_alpha = np.asarray(self.prior_alpha, dtype=float)
         self.run_length_probs = np.array([1.0])
-        self.run_alphas = [self.prior_alpha.copy()]
+        # One row per live run hypothesis, each the Dirichlet alpha vector
+        # for "this run started `r` possessions ago". Row 0 is always the
+        # just-started run (a fresh copy of prior_alpha).
+        self.alphas = self.prior_alpha.reshape(1, -1).copy()
+        self.totals = np.array([self.prior_alpha.sum()])
         self.t = 0
 
     def update(self, counts: np.ndarray) -> np.ndarray:
@@ -78,10 +66,23 @@ class DirichletMultinomialBOCPD:
         """
         counts = np.asarray(counts, dtype=float)
         h = 1.0 / self.hazard
+        n = counts.sum()
+        touched = np.flatnonzero(counts)
 
-        log_pred = np.array(
-            [_dirichlet_multinomial_log_pred(a, counts) for a in self.run_alphas]
-        )
+        if touched.size:
+            a_t = self.alphas[:, touched]
+            c_t = counts[touched]
+            # A touched category with alpha=0 (a transition the prior says
+            # is impossible) correctly gives gammaln(c) - gammaln(0) = -inf
+            # for that run -- this observation rules that run-length
+            # hypothesis out, rather than being silently ignored.
+            with np.errstate(divide="ignore"):
+                per_category = gammaln(a_t + c_t) - gammaln(a_t)
+            sum_per_run = per_category.sum(axis=1)
+        else:
+            sum_per_run = np.zeros(len(self.totals))
+
+        log_pred = gammaln(self.totals) - gammaln(self.totals + n) + sum_per_run
         pred = np.exp(log_pred)
         joint = self.run_length_probs * pred
 
@@ -98,12 +99,13 @@ class DirichletMultinomialBOCPD:
             new_run_length_probs = np.zeros_like(new_run_length_probs)
             new_run_length_probs[0] = 1.0
 
-        new_run_alphas = [self.prior_alpha.copy()] + [
-            a + counts for a in self.run_alphas
-        ]
+        grown = self.alphas.copy()
+        if touched.size:
+            grown[:, touched] += c_t
+        self.alphas = np.vstack([self.prior_alpha, grown])
+        self.totals = np.concatenate(([self.prior_alpha.sum()], self.totals + n))
 
         self.run_length_probs = new_run_length_probs
-        self.run_alphas = new_run_alphas
         self.t += 1
         return self.run_length_probs
 

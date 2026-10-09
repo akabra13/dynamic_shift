@@ -56,3 +56,11 @@ jobs:
           KEYS: ${{ inputs.keys }}
         run: |
           python scripts/run_validation.py ${KEYS:+--keys $KEYS}
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-results
+          path: validation_results.json
+          if-no-files-found: ignore

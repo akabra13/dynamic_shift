@@ -32,24 +32,33 @@ def categories(grid: Grid = TACTICAL) -> list[str]:
     return labels
 
 
-def chain_prior_alpha(chain: Chain, kappa: float) -> np.ndarray:
+def chain_prior_alpha(chain: Chain, kappa: float, floor: float = 0.01) -> np.ndarray:
     """A team's shrunk chain as a Dirichlet prior over `categories(chain.grid)`.
 
     `chain.P` rows already sum to 1, so scaling by `kappa` gives each zone
     `kappa` pseudo-actions worth of prior pseudo-counts -- the same kappa
     units pitchgraph.chains.team already uses for shrinkage.
+
+    `floor` adds a small per-category pseudo-count on top. Without it, a
+    zone-to-zone move the league prior never made has alpha exactly 0, and
+    the detector (correctly) treats *any* observation there as ruling out
+    every run-length hypothesis outright -- too strict for a single rare
+    move that isn't actually a tactical change. The floor is in the same
+    kappa-style pseudo-count units as the rest of the row.
     """
-    return (chain.P * kappa).reshape(-1)
+    return (chain.P * kappa).reshape(-1) + floor
 
 
 def match_possession_counts(events: pl.LazyFrame, team_id: int,
-                             grid: Grid = TACTICAL) -> list[tuple[int, np.ndarray]]:
+                             grid: Grid = TACTICAL) -> list[tuple[int, int, np.ndarray]]:
     """One match's possessions for `team_id`, in chronological order, as
-    (possession_id, flattened category-count vector) pairs.
+    (possession_id, period, flattened category-count vector) triples.
 
     Only open-play actions count (set-piece deliveries excluded), matching
     how pitchgraph.chains.counts.outcome_table builds a team's chain --
-    so a possession's counts live in the same space as the prior.
+    so a possession's counts live in the same space as the prior. `period`
+    (the possession's first action's period) is carried through so a
+    permutation null can shuffle within each half without crossing it.
     """
     n = grid.n
     act = classify_actions(events, open_play_only=True).filter(pl.col("team_id") == team_id)
@@ -57,7 +66,7 @@ def match_possession_counts(events: pl.LazyFrame, team_id: int,
              .when(pl.col("kind") == "shot").then(pl.lit(n))
              .otherwise(pl.lit(n + 1)))
     rows = (act.with_columns(z0=grid.index_expr(pl.col("x"), pl.col("y")), out=out.cast(pl.Int32))
-               .select("possession", "idx", "z0", "out")
+               .select("possession", "idx", "period", "z0", "out")
                .collect()
                .sort(["possession", "idx"]))
 
@@ -67,7 +76,8 @@ def match_possession_counts(events: pl.LazyFrame, team_id: int,
         counts = np.zeros(n * k)
         idx = group["z0"].to_numpy() * k + group["out"].to_numpy()
         np.add.at(counts, idx, 1.0)
-        result.append((int(poss), counts))
+        period = int(group["period"][0])
+        result.append((int(poss), period, counts))
     return result
 
 

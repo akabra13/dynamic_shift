@@ -64,6 +64,20 @@ def test_zero_prior_categories_with_zero_counts_dont_produce_nan():
     assert probs.sum() == pytest.approx(1.0)
 
 
+def test_touched_zero_prior_category_rules_out_that_run_not_nan():
+    """Unlike an untouched zero-prior category (contributes 0, tested
+    above), a touched one -- an observation in a category the prior says
+    is impossible -- must drive that run-length hypothesis's likelihood
+    to exactly 0 (gammaln(c) - gammaln(0) = -inf), not silently ignore it.
+    With only one run alive, that forces the 'just changed' fallback."""
+    prior_alpha = np.array([5.0, 0.0, 3.0])
+    detector = DirichletMultinomialBOCPD(prior_alpha=prior_alpha, hazard=20.0)
+
+    probs = detector.update(np.array([0.0, 1.0, 0.0]))  # category 1: impossible
+    assert np.all(np.isfinite(probs))
+    assert probs[0] == pytest.approx(1.0)  # forced to "just changed"
+
+
 def test_streaming_matches_batch_replay():
     """The detector only ever conditions on x_1:t, so feeding the same
     sequence twice (fresh detector each time) must give identical

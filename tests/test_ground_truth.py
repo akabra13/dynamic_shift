@@ -6,9 +6,9 @@ import polars as pl
 from dynamic_shift.ground_truth import had_substitution_within, red_cards, tactical_shifts
 
 
-def _ev(typ, minute, second=0.0, team_id=1, extra=None):
-    return {"type": typ, "team_id": team_id, "minute": minute, "second": second,
-            "extra": json.dumps(extra or {})}
+def _ev(typ, minute, second=0.0, team_id=1, possession=1, extra=None):
+    return {"type": typ, "team_id": team_id, "possession": possession,
+            "minute": minute, "second": second, "extra": json.dumps(extra or {})}
 
 
 def _frame(rows):
@@ -17,11 +17,12 @@ def _frame(rows):
 
 def test_tactical_shift_classified_as_real_change_against_starting_xi():
     ev = _frame([
-        _ev("Starting XI", 0, extra={"tactics": {"formation": 433}}),
-        _ev("Tactical Shift", 60, extra={"tactics": {"formation": 442}}),
+        _ev("Starting XI", 0, possession=1, extra={"tactics": {"formation": 433}}),
+        _ev("Tactical Shift", 60, possession=42, extra={"tactics": {"formation": 442}}),
     ])
     out = tactical_shifts(ev, team_id=1)
     assert len(out) == 1
+    assert out[0]["possession"] == 42
     assert out[0]["formation_before"] == 433
     assert out[0]["formation_after"] == 442
     assert out[0]["real_change"] is True
@@ -45,6 +46,7 @@ def test_red_card_detected_not_yellow():
     out = red_cards(ev)
     assert len(out) == 1
     assert out[0]["minute"] == 80.0
+    assert out[0]["possession"] == 1
 
 
 def test_had_substitution_within_window():

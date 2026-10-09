@@ -38,7 +38,7 @@ def tactical_shifts(events: pl.LazyFrame, team_id: int) -> list[dict]:
     """
     rows = (
         events.filter((pl.col("type").is_in(TACTICS_TYPES)) & (pl.col("team_id") == team_id))
-              .select("type", "minute", "second", "extra")
+              .select("type", "possession", "minute", "second", "extra")
               .sort(["minute", "second"])
               .collect()
     )
@@ -49,8 +49,8 @@ def tactical_shifts(events: pl.LazyFrame, team_id: int) -> list[dict]:
         formation = (extra.get("tactics") or {}).get("formation")
         if row["type"] == "Tactical Shift":
             out.append({
-                "minute": _clock(row), "formation_before": previous_formation,
-                "formation_after": formation,
+                "possession": row["possession"], "minute": _clock(row),
+                "formation_before": previous_formation, "formation_after": formation,
                 "real_change": previous_formation is not None and formation != previous_formation,
             })
         previous_formation = formation
@@ -63,7 +63,7 @@ def red_cards(events: pl.LazyFrame) -> list[dict]:
     is_bad_behaviour = pl.col("type") == "Bad Behaviour"
     rows = (
         events.filter(is_foul | is_bad_behaviour)
-              .select("type", "team_id", "minute", "second", "extra")
+              .select("type", "team_id", "possession", "minute", "second", "extra")
               .sort(["minute", "second"])
               .collect()
     )
@@ -73,7 +73,8 @@ def red_cards(events: pl.LazyFrame) -> list[dict]:
         key = "foul_committed" if row["type"] == "Foul Committed" else "bad_behaviour"
         card = ((extra.get(key) or {}).get("card") or {}).get("name", "")
         if "Red Card" in card:
-            out.append({"minute": _clock(row), "team_id": row["team_id"], "card": card})
+            out.append({"possession": row["possession"], "minute": _clock(row),
+                        "team_id": row["team_id"], "card": card})
     return out
 
 

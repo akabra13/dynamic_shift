@@ -6,7 +6,9 @@ import pytest
 from pitchgraph.chains.counts import CountStore
 from pitchgraph.chains.grid import Grid
 
-from dynamic_shift.validate import detect_within, leave_one_out_prior
+from dynamic_shift.validate import (
+    alarms, check_control, leave_one_out_prior, possession_index, score_match,
+)
 
 GRID = Grid.uniform(2, 1)  # zone 0: x<60, zone 1: x>=60
 
@@ -52,29 +54,65 @@ def test_leave_one_out_prior_excludes_the_held_out_match():
     assert chain.shoot[0] < 0.01
 
 
-def test_detect_within_finds_the_injected_shift():
+def test_possession_index_finds_the_first_possession_at_or_after():
+    all_rows = _stable_match(1) + _stable_match(2) + _held_out_match_with_injected_shift(3)
+    store = CountStore.from_events(_frame(all_rows), grid=GRID)
+    chain = leave_one_out_prior(store, team_id=1, exclude_match=3, kappa=1.0)
+    held_out = _frame(_held_out_match_with_injected_shift(3))
+    ms = score_match(held_out, team_id=1, chain=chain, prior_strength=5.0, hazard=50.0, grid=GRID)
+
+    assert possession_index(ms, possession=11) == 10  # possession ids are 1-indexed
+    assert possession_index(ms, possession=1) == 0
+    assert possession_index(ms, possession=999) is None  # past the match's last possession
+
+
+def test_alarms_and_check_control_find_the_injected_shift():
     all_rows = _stable_match(1) + _stable_match(2) + _held_out_match_with_injected_shift(3)
     store = CountStore.from_events(_frame(all_rows), grid=GRID)
     chain = leave_one_out_prior(store, team_id=1, exclude_match=3, kappa=1.0)
 
-    held_out_events = _frame(_held_out_match_with_injected_shift(3))
-    result = detect_within(held_out_events, team_id=1, chain=chain, around_minute=11.0,
-                            prior_strength=5.0, hazard=50.0, threshold=0.15,
-                            within_possessions=10, grid=GRID)
+    held_out = _frame(_held_out_match_with_injected_shift(3))
+    ms = score_match(held_out, team_id=1, chain=chain, prior_strength=5.0, hazard=50.0,
+                      change_point_window=5, grid=GRID)
+    alarm_idx = alarms(ms, threshold=0.15, burn_in=10, refractory=5)
+    assert alarm_idx, "expected at least one alarm after the injected shift"
+
+    result = check_control(ms, event_possession=11, alarm_indices=alarm_idx, within_possessions=10)
     assert result.detected is True
     assert result.latency is not None and result.latency <= 5
 
 
-def test_detect_within_does_not_fire_on_a_stable_stretch():
-    """A negative control: checking a point in an otherwise-stable match
-    should not detect anything, matching the design doc's requirement
+def test_alarms_do_not_fire_on_a_stable_stretch():
+    """A negative control: a stable match with no injected shift should
+    produce no alarms past burn-in, matching the design doc's requirement
     that negative controls flag at about the base rate, not constantly."""
     all_rows = _stable_match(1) + _stable_match(2) + _stable_match(3, n_possessions=20)
     store = CountStore.from_events(_frame(all_rows), grid=GRID)
     chain = leave_one_out_prior(store, team_id=1, exclude_match=3, kappa=1.0)
 
-    held_out_events = _frame(_stable_match(3, n_possessions=20))
-    result = detect_within(held_out_events, team_id=1, chain=chain, around_minute=11.0,
-                            prior_strength=5.0, hazard=50.0, threshold=0.15,
-                            within_possessions=9, grid=GRID)
+    held_out = _frame(_stable_match(3, n_possessions=20))
+    ms = score_match(held_out, team_id=1, chain=chain, prior_strength=5.0, hazard=50.0,
+                      change_point_window=5, grid=GRID)
+    alarm_idx = alarms(ms, threshold=0.15, burn_in=10, refractory=5)
+    assert alarm_idx == []
+
+    result = check_control(ms, event_possession=11, alarm_indices=alarm_idx, within_possessions=9)
     assert result.detected is False
+
+
+def test_alarms_respect_burn_in_and_refractory():
+    """Burn-in: an early high score (every detector starts at P=1.0 for
+    the very first possessions) must not count as an alarm. Refractory:
+    consecutive possessions above threshold count as one alarm, not many."""
+    from dynamic_shift.validate import MatchScores
+    import numpy as np
+
+    scores = np.array([1.0, 1.0, 1.0, 0.9, 0.9, 0.9, 0.05, 0.05])
+    ms = MatchScores(possession_ids=np.arange(1, 9), periods=np.ones(8, dtype=int), scores=scores)
+
+    # No burn-in: the leading 1.0s would (wrongly) all alarm.
+    assert alarms(ms, threshold=0.5, burn_in=0, refractory=0) == [0, 1, 2, 3, 4, 5]
+    # With burn-in=3 and refractory=2: possessions 3,4,5 are all > 0.5, but
+    # only the first (index 3) should fire; 4 and 5 are within the
+    # refractory window of it.
+    assert alarms(ms, threshold=0.5, burn_in=3, refractory=2) == [3]
