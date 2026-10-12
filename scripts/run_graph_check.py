@@ -28,7 +28,7 @@ from dynamic_shift.observe import match_possession_counts  # noqa: E402
 from dynamic_shift.report import family_report  # noqa: E402
 from dynamic_shift.signal_check import event_index, window_ids  # noqa: E402
 
-WINDOW = 25
+WINDOW = 15
 RANDOM_POINTS_PER_MATCH = 5
 LABELS = ("real_substantive", "real_clean", "same_formation", "random")
 

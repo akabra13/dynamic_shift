@@ -72,10 +72,18 @@ Same question, now with team shape from StatsBomb 360 freeze-frames (`scripts/ru
 Question: do richer structural features separate real tactical changes from random moments, where the earlier coarse ones did not (best AUC 0.53)?
 
 - **Events:** `real_substantive` = labelled formation change with moved>=3; `real_clean` = moved>=3 and nobody joined/left; `same_formation` (negative control); `random` (5 per team-match) baseline.
-- **Windows:** 25 team possessions before vs after for pass geometry and passing network (all 80 seasons); 5 minutes before vs after for freeze-frame topology (360 seasons only). Windows must be complete and inside one half.
+- **Windows:** 25 team possessions before vs after for pass geometry and passing network; 5 minutes before vs after for freeze-frame topology (360 seasons only). Windows must be complete and inside one half.
 - **Features:** pass geometry (length mean/std, forward component, lateral component, direction concentration, long-pass share); passing network (edge entropy, algebraic connectivity, weighted clustering, centralisation); freeze-frame persistent homology (H0 total and max = minimum-spanning-tree gaps, H1 total persistence and loop count), each out of and in possession.
 - **Three primary statistics**, one per family: Euclidean norm of the per-feature signed change, each feature divided by its standard deviation among random moments. Per-feature results are secondary and descriptive only.
 - **Pass bar:** a family counts as signal only if its AUC vs random for `real_substantive` is >= 0.60 AND the 98.3% bootstrap-by-team-match CI (Bonferroni for three primaries) excludes 0.5. `same_formation` must stay near 0.5 or the result is distrusted. Anything else is reported as no signal. No changes to features, windows or thresholds after seeing results.
+
+### Result (2026-10-12)
+
+**Amendment, disclosed:** the 25-possession window was infeasible. A team has only ~25-35 possessions per half, so almost no event had 25 on each side inside one half: the first graph run kept 37 real_substantive events (random 809), too few to conclude anything. I re-ran the graph/network families at 15 possessions, the window the earlier checks used. This was chosen after seeing sample sizes and after seeing the n=37 AUCs (0.58 geometry, 0.54 network, CIs spanning 0.5), so treat it as one extra forking path. Nothing else changed. (Also, only 23 competition-seasons are eligible for these runs, not 80: tournaments have too few matches per team for pitchgraph's league preparation.)
+
+**Freeze-frame topology** (5 min windows, 12 360-seasons, run exactly as registered): real_substantive n=164, AUC 0.523 (98.3% CI 0.466-0.570); real_clean n=31, AUC 0.499 (CI 0.35-0.63); same_formation 0.519. Fails the bar. Every per-feature AUC is within 0.46-0.59.
+
+Composites need all 8 phase-split features, so 301 labelled events shrank to 164 usable ones.
 
 ## Scope note on the detector as implemented
 
