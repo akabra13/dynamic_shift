@@ -54,3 +54,34 @@ def test_had_substitution_within_window():
     assert had_substitution_within(ev, team_id=1, minute=58.5, window_minutes=1.0) is True
     assert had_substitution_within(ev, team_id=1, minute=65.0, window_minutes=1.0) is False
     assert had_substitution_within(ev, team_id=2, minute=58.0, window_minutes=1.0) is False
+
+
+def _lineup(players):
+    return [{"player": {"id": pid}, "position": {"name": pos}} for pid, pos in players]
+
+
+def test_shift_details_counts_role_changes_not_just_label():
+    from dynamic_shift.ground_truth import shift_details
+    before = _lineup([(1, "Goalkeeper"), (2, "Left Back"), (3, "Right Back"), (4, "Striker")])
+    after = _lineup([(1, "Goalkeeper"), (2, "Left Wing Back"), (3, "Right Back"), (5, "Striker")])
+    ev = _frame([
+        _ev("Starting XI", 0, extra={"tactics": {"formation": 442, "lineup": before}}),
+        _ev("Tactical Shift", 60, possession=9,
+            extra={"tactics": {"formation": 352, "lineup": after}}),
+    ])
+    d = shift_details(ev, team_id=1)[0]
+    assert d["real_change"] is True
+    assert d["continuing"] == 3      # players 1, 2, 3
+    assert d["moved"] == 1           # only player 2 changed role
+    assert d["joined"] == 1 and d["left"] == 1   # 4 -> 5 is a substitution
+
+
+def test_shift_details_relabel_has_no_moved_players():
+    from dynamic_shift.ground_truth import shift_details
+    lu = _lineup([(1, "Goalkeeper"), (2, "Left Back"), (3, "Striker")])
+    ev = _frame([
+        _ev("Starting XI", 0, extra={"tactics": {"formation": 4231, "lineup": lu}}),
+        _ev("Tactical Shift", 60, extra={"tactics": {"formation": 433, "lineup": lu}}),
+    ])
+    d = shift_details(ev, team_id=1)[0]
+    assert d["real_change"] is True and d["moved"] == 0

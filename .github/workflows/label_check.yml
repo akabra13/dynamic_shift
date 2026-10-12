@@ -1,0 +1,65 @@
+name: Formation label check
+
+# How many labelled formation changes are real lineup reshuffles?
+# than a random moment does? Same Drive/rclone setup as validate.yml;
+# read-only on the lake.
+
+on:
+  workflow_dispatch:
+    inputs:
+      keys:
+        description: "Space-separated competition-season keys (blank = every eligible season)"
+        required: false
+        default: ""
+
+jobs:
+  labels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dynamic_shift (and pitchgraph, its pinned dependency)
+        run: pip install -e .
+
+      - name: Install rclone
+        run: curl https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone
+        env:
+          GDRIVE_OAUTH_TOKEN: ${{ secrets.GDRIVE_OAUTH_TOKEN }}
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        run: |
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf <<EOF
+          [gdrive]
+          type = drive
+          scope = drive
+          token = ${GDRIVE_OAUTH_TOKEN}
+          root_folder_id = ${GDRIVE_FOLDER_ID}
+          EOF
+
+      - name: Pull lake from Drive
+        run: |
+          mkdir -p "$HOME/pitchgraph"
+          rclone copy gdrive:lake/events "$HOME/pitchgraph/lake/events" --fast-list -v
+          rclone copy gdrive:lake/matches "$HOME/pitchgraph/lake/matches" --fast-list -v
+
+      - name: Label check
+        env:
+          PITCHGRAPH_DATA: /home/runner/pitchgraph
+          KEYS: ${{ inputs.keys }}
+        run: |
+          python scripts/run_label_check.py
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: label-check-results
+          path: label_check_results.json
+          if-no-files-found: ignore
