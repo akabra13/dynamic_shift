@@ -29,13 +29,9 @@ MIN_OUTFIELD_VISIBLE = 6
 MIN_FRAMES_PER_WINDOW = 20
 
 
-def team_shape_rows(frames: pl.DataFrame, events: pl.DataFrame, team_id: int) -> pl.DataFrame:
-    """One row per usable freeze-frame for `team_id`.
-
-    frames: match_id, event_id, teammate, keeper, x, y (one row per player)
-    events: match_id, event_id, team_id, possession_team_id, period, period_seconds, x, y
-    Returns: period, t, oop, n_vis, depth, depth_rel, width, compact
-    """
+def _team_points(frames: pl.DataFrame, events: pl.DataFrame, team_id: int) -> pl.DataFrame:
+    """Visible outfield players of `team_id`, one row per player per frame,
+    mirrored so the team attacks toward x=120 (columns px, py, bx added)."""
     ev = events.select(
         "match_id", "event_id", "period", "period_seconds", "possession_team_id",
         pl.col("team_id").alias("ev_team"), pl.col("x").alias("bx"), pl.col("y").alias("by"),
@@ -50,6 +46,17 @@ def team_shape_rows(frames: pl.DataFrame, events: pl.DataFrame, team_id: int) ->
         py=pl.when(flip).then(PITCH_Y - pl.col("y")).otherwise(pl.col("y")),
         bx=pl.when(flip).then(PITCH_X - pl.col("bx")).otherwise(pl.col("bx")),
     )
+    return df
+
+
+def team_shape_rows(frames: pl.DataFrame, events: pl.DataFrame, team_id: int) -> pl.DataFrame:
+    """One row per usable freeze-frame for `team_id`.
+
+    frames: match_id, event_id, teammate, keeper, x, y (one row per player)
+    events: match_id, event_id, team_id, possession_team_id, period, period_seconds, x, y
+    Returns: period, t, oop, n_vis, depth, depth_rel, width, compact
+    """
+    df = _team_points(frames, events, team_id)
     df = df.with_columns(
         cx=pl.col("px").mean().over("event_id"), cy=pl.col("py").mean().over("event_id"),
     ).with_columns(
@@ -73,26 +80,29 @@ def team_shape_rows(frames: pl.DataFrame, events: pl.DataFrame, team_id: int) ->
     return out
 
 
-def _window_mean(rows: pl.DataFrame, period: int, t0: float, t1: float, oop: bool) -> dict | None:
+def _window_mean(rows: pl.DataFrame, period: int, t0: float, t1: float, oop: bool,
+                 features: tuple = FEATURES) -> dict | None:
     w = rows.filter((pl.col("period") == period) & (pl.col("t") >= t0) & (pl.col("t") < t1)
                     & (pl.col("oop") == oop))
     if w.height < MIN_FRAMES_PER_WINDOW:
         return None
-    return {f: float(w[f].mean()) for f in FEATURES}
+    return {f: float(w[f].mean()) for f in features}
 
 
-def shape_change(rows: pl.DataFrame, period: int, t: float, window_s: float = 300.0) -> dict:
+def shape_change(rows: pl.DataFrame, period: int, t: float, window_s: float = 300.0,
+                 features: tuple = FEATURES, signed: bool = False) -> dict:
     """|mean feature after - before| for each (phase, feature), over the
     `window_s` seconds either side of `t` inside one period. Entries are
     present only where both sides have enough frames."""
     out = {}
     for oop, phase in ((True, "oop"), (False, "ip")):
-        before = _window_mean(rows, period, t - window_s, t, oop)
-        after = _window_mean(rows, period, t, t + window_s, oop)
+        before = _window_mean(rows, period, t - window_s, t, oop, features)
+        after = _window_mean(rows, period, t, t + window_s, oop, features)
         if before is None or after is None:
             continue
-        for f in FEATURES:
-            out[f"{phase}_{f}"] = abs(after[f] - before[f])
+        for f in features:
+            d = after[f] - before[f]
+            out[f"{phase}_{f}"] = d if signed else abs(d)
     return out
 
 
@@ -138,3 +148,26 @@ def topology_features(points: np.ndarray) -> dict | None:
     pers = dgm1[:, 1] - dgm1[:, 0] if len(dgm1) else np.array([])
     return {"h0_sum": float(mst.sum()), "h0_max": float(mst.max()),
             "h1_sum": float(pers.sum()), "h1_n": float(len(pers))}
+
+
+def team_topology_rows(frames: pl.DataFrame, events: pl.DataFrame, team_id: int) -> pl.DataFrame:
+    """One row per usable freeze-frame: period, t, oop and TOPO_NAMES."""
+    df = _team_points(frames, events, team_id).sort("event_id")
+    ids = df["event_id"].to_numpy()
+    px, py = df["px"].to_numpy(), df["py"].to_numpy()
+    meta = df.group_by("event_id").agg(
+        pl.first("period"), pl.first("period_seconds").alias("t"),
+        (pl.first("possession_team_id") != team_id).alias("oop"))
+    meta = {r["event_id"]: r for r in meta.iter_rows(named=True)}
+    cuts = np.flatnonzero(ids[1:] != ids[:-1]) + 1
+    bounds = np.concatenate([[0], cuts, [len(ids)]])
+    rows = []
+    for a, b in zip(bounds[:-1], bounds[1:]):
+        if b - a < MIN_OUTFIELD_VISIBLE:
+            continue
+        feats = topology_features(np.c_[px[a:b], py[a:b]])
+        if feats is None:
+            continue
+        m = meta[ids[a]]
+        rows.append({"period": m["period"], "t": m["t"], "oop": m["oop"], **feats})
+    return pl.DataFrame(rows).sort(["period", "t"]) if rows else pl.DataFrame()

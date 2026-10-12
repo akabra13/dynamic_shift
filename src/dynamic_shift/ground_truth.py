@@ -134,3 +134,25 @@ def had_substitution_within(events: pl.LazyFrame, team_id: int, minute: float,
               .collect()
     )
     return rows.height > 0
+
+
+SUBSTANTIVE_MOVED = 3
+
+
+def classify_shifts(details: list[dict]) -> dict[str, list[dict]]:
+    """Split `shift_details` output into the pre-registered control classes.
+
+    real_substantive: labelled formation change with >= 3 continuing
+    players in new positions. real_clean: the subset where nobody joined
+    or left (no substitution/card muddying it). same_formation: the
+    negative control. Labelled changes that move < 3 players are in none.
+    """
+    out = {"real_substantive": [], "real_clean": [], "same_formation": []}
+    for d in details:
+        if not d["real_change"]:
+            out["same_formation"].append(d)
+        elif d["moved"] >= SUBSTANTIVE_MOVED:
+            out["real_substantive"].append(d)
+            if d["joined"] == 0 and d["left"] == 0:
+                out["real_clean"].append(d)
+    return out

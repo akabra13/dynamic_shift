@@ -85,3 +85,12 @@ def test_shift_details_relabel_has_no_moved_players():
     ])
     d = shift_details(ev, team_id=1)[0]
     assert d["real_change"] is True and d["moved"] == 0
+
+
+def test_classify_shifts_splits_substantive_clean_and_same():
+    from dynamic_shift.ground_truth import classify_shifts
+    d = lambda real, moved, j=0, l=0: {"real_change": real, "moved": moved, "joined": j, "left": l}
+    out = classify_shifts([d(True, 4), d(True, 4, 1, 1), d(True, 1), d(False, 0)])
+    assert len(out["real_substantive"]) == 2
+    assert len(out["real_clean"]) == 1
+    assert len(out["same_formation"]) == 1

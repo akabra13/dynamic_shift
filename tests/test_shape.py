@@ -80,3 +80,15 @@ def test_topology_ring_has_a_loop_and_a_line_does_not():
     assert r["h1_n"] >= 1 and r["h1_sum"] > 0
     assert l["h1_n"] == 0
     assert abs(l["h0_sum"] - 35.0) < 1e-9 and abs(l["h0_max"] - 5.0) < 1e-9
+
+
+def test_topology_rows_and_signed_change():
+    import pytest
+    pytest.importorskip("ripser")
+    from dynamic_shift.shape import TOPO_NAMES, team_topology_rows
+    f, e = _make(60, lambda i: 50.0 if i < 30 else 35.0)
+    rows = team_topology_rows(f, e, T)
+    assert rows.height == 60 and set(TOPO_NAMES) <= set(rows.columns)
+    ch = shape_change(rows.with_columns(n=pl.lit(7)), 1, 300.0, window_s=290.0,
+                      features=TOPO_NAMES, signed=True)
+    assert abs(ch["oop_h0_sum"]) < 1e-9     # a pure x-shift leaves the shape's topology unchanged
