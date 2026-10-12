@@ -112,3 +112,53 @@ def boot_ci(per_match: list[np.ndarray], rng: np.random.Generator, n_boot: int =
         idx = rng.integers(0, len(per_match), len(per_match))
         ms.append(sums[idx].sum() / max(cnts[idx].sum(), 1))
     return float(pooled.mean()), float(np.percentile(ms, 5)), float(np.percentile(ms, 95))
+
+
+def window_ids(possessions: list[tuple[int, int, np.ndarray]], i: int, window: int):
+    """(before_ids, after_ids) for an event at possession index `i`, or None
+    unless both windows are complete and inside a single half (same rule
+    as `window_stat`)."""
+    if i < window or i + window > len(possessions):
+        return None
+    before, after = possessions[i - window:i], possessions[i:i + window]
+    periods = {p[1] for p in before} | {p[1] for p in after}
+    if len(periods) != 1:
+        return None
+    return [p[0] for p in before], [p[0] for p in after]
+
+
+def auc_ci_by_match(values: np.ndarray, value_keys: np.ndarray,
+                    base: np.ndarray, base_keys: np.ndarray,
+                    rng: np.random.Generator, level: float = 0.99,
+                    n_boot: int = 500) -> tuple[float, float, float]:
+    """AUC of `values` vs `base` with a bootstrap CI that resamples whole
+    team-matches (keys), so several events from one match are not treated
+    as independent. Returns (auc, lo, hi) for the central `level`."""
+    values, base = np.asarray(values, float), np.asarray(base, float)
+    if len(values) == 0 or len(base) == 0:
+        return float("nan"), float("nan"), float("nan")
+    keys, inv = np.unique(np.concatenate([value_keys, base_keys]), return_inverse=True)
+    ev_k, ba_k = inv[:len(values)], inv[len(values):]
+    order = np.argsort(base)
+    base_sorted, ba_k_sorted = base[order], ba_k[order]
+    lo_idx = np.searchsorted(base_sorted, values, side="left")
+    hi_idx = np.searchsorted(base_sorted, values, side="right")
+
+    def auc(w_key: np.ndarray) -> float:
+        wb = w_key[ba_k_sorted]
+        cum = np.concatenate([[0.0], np.cumsum(wb)])
+        we = w_key[ev_k]
+        denom = we.sum() * wb.sum()
+        if denom <= 0:
+            return float("nan")
+        return float((we * (cum[lo_idx] + 0.5 * (cum[hi_idx] - cum[lo_idx]))).sum() / denom)
+
+    point = auc(np.ones(len(keys)))
+    boots = []
+    for _ in range(n_boot):
+        counts = np.bincount(rng.integers(0, len(keys), len(keys)), minlength=len(keys)).astype(float)
+        a = auc(counts)
+        if not np.isnan(a):
+            boots.append(a)
+    tail = (1 - level) / 2 * 100
+    return point, float(np.percentile(boots, tail)), float(np.percentile(boots, 100 - tail))

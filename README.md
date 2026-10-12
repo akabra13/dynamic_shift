@@ -63,6 +63,20 @@ Same question, now with team shape from StatsBomb 360 freeze-frames (`scripts/ru
 - The noise floor is large: a random 5-minute split already moves mean block depth by ~10.6 pitch units, because freeze-frames only contain the players the camera sees.
 - **Conclusion:** neither in-possession ball movement nor crude 360 shape separates a labelled formation change from an arbitrary moment. Either StatsBomb "formation change" labels rarely correspond to a change that is visible at this resolution, or the crude features cannot see it. A better test would need player identities in the frames (not provided) to compare role-specific positions.
 
+## Label check (2026-10-12)
+
+`scripts/run_label_check.py` compared the lineup before and after every StatsBomb Tactical Shift (10,860 shifts, 3,290 labelled real formation changes). The "labels are cosmetic" explanation is rejected: only 0.3% of labelled changes move nobody, the median labelled change moves 4 continuing players to new positions (same-formation shifts: mean 1.6). Caveat: 85% of labelled changes also involve a substitution or card; only 15% (~500) are moved>=3 with nobody joining/leaving.
+
+## Pre-registered: graph / topology feature test (written before running)
+
+Question: do richer structural features separate real tactical changes from random moments, where the earlier coarse ones did not (best AUC 0.53)?
+
+- **Events:** `real_substantive` = labelled formation change with moved>=3; `real_clean` = moved>=3 and nobody joined/left; `same_formation` (negative control); `random` (5 per team-match) baseline.
+- **Windows:** 25 team possessions before vs after for pass geometry and passing network (all 80 seasons); 5 minutes before vs after for freeze-frame topology (360 seasons only). Windows must be complete and inside one half.
+- **Features:** pass geometry (length mean/std, forward component, lateral component, direction concentration, long-pass share); passing network (edge entropy, algebraic connectivity, weighted clustering, centralisation); freeze-frame persistent homology (H0 total and max = minimum-spanning-tree gaps, H1 total persistence and loop count), each out of and in possession.
+- **Three primary statistics**, one per family: Euclidean norm of the per-feature signed change, each feature divided by its standard deviation among random moments. Per-feature results are secondary and descriptive only.
+- **Pass bar:** a family counts as signal only if its AUC vs random for `real_substantive` is >= 0.60 AND the 98.3% bootstrap-by-team-match CI (Bonferroni for three primaries) excludes 0.5. `same_formation` must stay near 0.5 or the result is distrusted. Anything else is reported as no signal. No changes to features, windows or thresholds after seeing results.
+
 ## Scope note on the detector as implemented
 
 The design doc models each zone row as its own conditional multinomial (a full team chain). What's implemented and tested here is a flattened version: one Dirichlet-multinomial over all (zone, outcome) categories together. This is an honest simplification, not the final per-row conditional model the design doc describes.

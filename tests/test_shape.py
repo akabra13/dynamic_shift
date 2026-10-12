@@ -67,3 +67,16 @@ def test_shape_change_sees_a_line_drop_and_nothing_when_steady():
 def test_too_few_frames_gives_no_entry():
     f, e = _make(10, lambda i: 40.0)
     assert shape_change(team_shape_rows(f, e, T), 1, 50.0, window_s=40.0) == {}
+
+
+def test_topology_ring_has_a_loop_and_a_line_does_not():
+    import pytest
+    pytest.importorskip("ripser")
+    from dynamic_shift.shape import topology_features
+    ang = np.linspace(0, 2 * np.pi, 8, endpoint=False)
+    ring = np.c_[10 * np.cos(ang), 10 * np.sin(ang)]
+    line = np.c_[np.arange(8) * 5.0, np.zeros(8)]
+    r, l = topology_features(ring), topology_features(line)
+    assert r["h1_n"] >= 1 and r["h1_sum"] > 0
+    assert l["h1_n"] == 0
+    assert abs(l["h0_sum"] - 35.0) < 1e-9 and abs(l["h0_max"] - 5.0) < 1e-9

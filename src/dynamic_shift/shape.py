@@ -112,3 +112,29 @@ def random_times(rows: pl.DataFrame, k: int, rng: np.random.Generator,
         period, lo, hi = cands[rng.integers(len(cands))]
         picks.append((int(period), float(rng.uniform(lo, hi))))
     return picks
+
+
+TOPO_NAMES = ("h0_sum", "h0_max", "h1_sum", "h1_n")
+
+
+def topology_features(points: np.ndarray) -> dict | None:
+    """Persistent-homology summary of a frame's point cloud (Vietoris-Rips).
+
+    H0 deaths are the minimum-spanning-tree edge lengths: h0_sum is the
+    total, h0_max the single biggest gap (how detached the most isolated
+    player is). H1 are loops -- rings of players around an empty space:
+    h1_sum the total persistence, h1_n how many.
+    """
+    from ripser import ripser
+    from scipy.sparse.csgraph import minimum_spanning_tree
+    from scipy.spatial.distance import pdist, squareform
+
+    pts = np.asarray(points, dtype=float)
+    if len(pts) < MIN_OUTFIELD_VISIBLE:
+        return None
+    D = squareform(pdist(pts))
+    mst = minimum_spanning_tree(D).data
+    dgm1 = ripser(D, distance_matrix=True, maxdim=1)["dgms"][1]
+    pers = dgm1[:, 1] - dgm1[:, 0] if len(dgm1) else np.array([])
+    return {"h0_sum": float(mst.sum()), "h0_max": float(mst.max()),
+            "h1_sum": float(pers.sum()), "h1_n": float(len(pers))}
