@@ -85,6 +85,18 @@ Question: do richer structural features separate real tactical changes from rand
 
 Composites need all 8 phase-split features, so 301 labelled events shrank to 164 usable ones.
 
+**Pass geometry and passing network** (15 possessions, 23 eligible seasons):
+
+| Family | real_substantive (n=729) | real_clean (n=83) | same_formation (n=2147) |
+|---|---|---|---|
+| pass geometry | AUC 0.546 (CI 0.522-0.571) | 0.592 (0.515-0.670) | 0.505 |
+| passing network | AUC 0.535 (CI 0.511-0.561) | 0.568 (0.494-0.632) | 0.510 |
+| freeze-frame topology | AUC 0.523 (0.466-0.570) | 0.499 (n=31) | 0.519 |
+
+**Verdict: none of the three families meets the pre-registered bar (AUC >= 0.60).** Geometry and network show a faint but real effect for substantive changes (CIs exclude 0.5; the negative control sits at 0.50-0.51), consistent with the earlier ball-movement result (0.53). It is a population-level tilt of a few AUC points, not a per-event detector. The cleanest subset trends higher (0.59 geometry) but n=83 and the CI includes 0.5-0.6, so that is a lead, not a finding.
+
+**Conclusion for dynamic_shift:** across ball movement, 360 shape, pass geometry, passing networks and persistent homology, a labelled tactical change is only faintly distinguishable from an arbitrary moment. Event-level "when did the game change" detection from open StatsBomb data is not supported. What remains defensible is descriptive monitoring (what changed over a window, by team) without a claim of detecting tactical changes.
+
 ## Scope note on the detector as implemented
 
 The design doc models each zone row as its own conditional multinomial (a full team chain). What's implemented and tested here is a flattened version: one Dirichlet-multinomial over all (zone, outcome) categories together. This is an honest simplification, not the final per-row conditional model the design doc describes.
