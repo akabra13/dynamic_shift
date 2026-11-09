@@ -97,6 +97,28 @@ Composites need all 8 phase-split features, so 301 labelled events shrank to 164
 
 **Conclusion for dynamic_shift:** across ball movement, 360 shape, pass geometry, passing networks and persistent homology, a labelled tactical change is only faintly distinguishable from an arbitrary moment. Event-level "when did the game change" detection from open StatsBomb data is not supported. What remains defensible is descriptive monitoring (what changed over a window, by team) without a claim of detecting tactical changes.
 
+## Pre-registered v2: identity-aware tests (written 2026-11-09, before any run)
+
+**Why try again.** Every family so far was identity-blind: zone distributions, pass-length statistics, network summary numbers, anonymous freeze-frames. A formation change is *specific players taking up new positions* (the label check found the median labelled change moves four continuing players), and events carry player ids and locations. That information has never been used. Earlier windows were also short (15 possessions, one half). This is a new observable, not a re-tune of an old one.
+
+**Lockbox.** Competition-seasons whose key's MD5 hash is divisible by 4 (`split.is_lockbox`) are never touched while developing. They are scored once, only if a test passes on the development seasons. Everything below is fixed now.
+
+**Test A, player position change** (`positions.py`, `scripts/run_position_check.py`).
+- Events: the 10 outfield players' located events (all types) for the team. Time runs on one continuous clock across the two halves, so a window may straddle half-time; extra time is ignored.
+- Windows: 600 s before vs 600 s after a moment, both complete and inside the match. A player counts if they have at least 5 touches in each window; at least 6 such players are needed.
+- Classes: the existing `classify_shifts` (`real_substantive`, `real_clean`) and the negative control `same_formation`, against 5 random moments per team-match as the baseline.
+- Two primary statistics, each a family: `disp_rel` (mean distance a continuing player's centroid moved, after subtracting the team's average shift) and `order_flip` (share of player pairs whose left/right or ahead/behind order reversed). Reported with the existing `report.family_report`.
+- **Pass bar (unchanged):** AUC vs random for `real_substantive` at least 0.60 and the 98.3% bootstrap-by-team-match CI above 0.5 (Bonferroni over three primaries). `same_formation` must stay near 0.5.
+
+**Test B, can a formation be read back from where players touch the ball** (`formation.py`, `scripts/run_formation_check.py`).
+- Examples: every segment between two Starting XI or Tactical Shift events of at least 600 s, labelled by that event's formation. Features use only the ten lineup outfield players' touch centroids (at least 5 touches each), sorted by depth: their x values and widths. Position names are not used.
+- Targets: back line size (3, 4 or 5) and number of forwards (1, 2 or 3), from the formation's first and last digits.
+- Model: gradient boosting (200 iterations, learning rate 0.1, balanced class weights), 5-fold cross-validation grouped by match on development seasons.
+- **Pass bar:** balanced accuracy at least 0.60 (chance 0.33) and the lower end of the 95% bootstrap-by-match CI above 0.40, for `back_line` (primary). `forwards` is secondary.
+- If B passes, a follow-up (B2) applies the trained classifier to before/after windows and asks whether a change of predicted shape separates labelled changes from random moments. B2 is specified only after B's result and is not part of this pre-registration.
+
+**Decision rule.** If A or B passes on the development seasons, rerun once on the lockbox. If it passes there too, rebuild the product on that observable and build `export.py` as a match timeline. If both fail on development, stop for good and publish the combined negative result. Either way it is written up.
+
 ## Scope note on the detector as implemented
 
 The design doc models each zone row as its own conditional multinomial (a full team chain). What's implemented and tested here is a flattened version: one Dirichlet-multinomial over all (zone, outcome) categories together. This is an honest simplification, not the final per-row conditional model the design doc describes.

@@ -1,0 +1,68 @@
+name: Position check
+
+# Pre-registered v2 tests (README): identity-aware position change (A) and
+# formation recognition (B). Read-only on the lake.
+
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: "position (test A) or formation (test B)"
+        required: true
+        default: "position"
+      split:
+        description: "dev, or lockbox (final run, only if the dev result passes)"
+        required: true
+        default: "dev"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dynamic_shift (and pitchgraph, its pinned dependency)
+        run: pip install -e . networkx scikit-learn
+
+      - name: Install rclone
+        run: curl https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone
+        env:
+          GDRIVE_OAUTH_TOKEN: ${{ secrets.GDRIVE_OAUTH_TOKEN }}
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        run: |
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf <<EOF
+          [gdrive]
+          type = drive
+          scope = drive
+          token = ${GDRIVE_OAUTH_TOKEN}
+          root_folder_id = ${GDRIVE_FOLDER_ID}
+          EOF
+
+      - name: Pull lake from Drive
+        run: |
+          mkdir -p "$HOME/pitchgraph"
+          rclone copy gdrive:lake "$HOME/pitchgraph/lake" --fast-list -v
+
+      - name: Position check
+        env:
+          PITCHGRAPH_DATA: /home/runner/pitchgraph
+          SCRIPT: ${{ inputs.script }}
+          SPLIT: ${{ inputs.split }}
+        run: |
+          python scripts/run_${SCRIPT}_check.py --split ${SPLIT}
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.script }}-check-${{ inputs.split }}
+          path: ${{ inputs.script }}_check_results.json
+          if-no-files-found: ignore
