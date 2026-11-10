@@ -175,6 +175,21 @@ v2b classifies whole segments. v2c asks the detector question: around a moment, 
 - **Descriptive:** `other_change` and `same_formation` vs `random`; the share of `back_switch` moments whose predicted back line actually crosses 0.5 in the right direction.
 - **Confirmation:** if development passes, train on all development windows and score the lockbox seasons once, same bars. **Disclosed:** the lockbox seasons were used once already, for v2b's segment classifier score; this statistic has never been computed on them.
 
+### Result v2c (2026-11-10): FAIL on the registered bar, but the first *specific* signal
+
+| Class (development, team-cross-fitted) | n | mean flip | AUC vs random (95% CI) |
+|---|---|---|---|
+| **back_switch** (labelled 3<->4) | 388 | 0.278 | **0.604** (0.572-0.634) |
+| other_change (same back line) | 1,248 | 0.211 | 0.512 (0.496-0.527) |
+| same_formation | 4,143 | 0.211 | 0.509 (0.501-0.519) |
+| random | 31,488 | 0.205 | - |
+
+back_switch vs same_formation: AUC 0.596 (0.563-0.625). Bar: 0.70 vs random and 0.65 vs same_formation. **Both miss, so this fails and the lockbox is not run.**
+
+- **What is new:** unlike v2 Test A, the controls sit at 0.51. The flip score reacts to a switch of the back line and to nothing else that is logged (other formation changes, same-formation shifts). It is the first feature in this project that is specific to the thing it measures, rather than to "something happened".
+- **Why it is too weak to detect:** a 15-minute window classifier is noisy. Random moments already flip by 0.21 on average, and only half of the real switches (51%) cross 0.5 in the right direction.
+- **Reading:** the back line of a team is visible in event data over a segment (v2b) and a switch moves it measurably (v2c), but not sharply enough to time a switch from 15 minutes either side. This is a description tool, not a detector.
+
 ## Scope note on the detector as implemented
 
 The design doc models each zone row as its own conditional multinomial (a full team chain). What's implemented and tested here is a flattened version: one Dirichlet-multinomial over all (zone, outcome) categories together. This is an honest simplification, not the final per-row conditional model the design doc describes.
