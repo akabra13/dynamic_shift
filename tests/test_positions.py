@@ -63,6 +63,17 @@ def test_formation_parse_and_shape_vector():
     assert shape_vector({0: (1, 1)}) is None
 
 
+def test_window_vector_takes_ten_busiest_players():
+    from dynamic_shift.formation import window_vector
+    # 12 players; players 10 and 11 have only 3 touches, the rest 5
+    player = np.concatenate([np.repeat(np.arange(10), 5), np.repeat([10, 11], 3)])
+    t = np.linspace(0, 99, len(player))
+    x = player.astype(float) * 10
+    v = window_vector(t, player, x, np.full(len(player), 40.0), 0, 100)
+    assert v is not None and sorted(v[:10]) == list(np.arange(10) * 10.0)
+    assert window_vector(t, player, x, x, 0, 30) is None      # too few players in window
+
+
 def test_balanced_accuracy_penalises_majority_guessing():
     y = [3, 4, 4, 4, 4, 4, 4, 4, 4, 5]
     assert balanced_accuracy(y, [4] * 10) == 1 / 3

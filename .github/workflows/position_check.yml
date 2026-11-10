@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       script:
-        description: "position (test A) or formation (test B)"
+        description: "position (A), formation (B, v2b) or flip (v2c)"
         required: true
         default: "position"
       split:

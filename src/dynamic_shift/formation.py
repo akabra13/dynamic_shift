@@ -41,6 +41,24 @@ def shape_vector(cents: dict) -> np.ndarray | None:
     return np.concatenate([pts[:, 0], np.abs(pts[:, 1] - 40.0)])
 
 
+def window_vector(t, player, x, y, lo: float, hi: float,
+                  min_touches: int = 3) -> np.ndarray | None:
+    """Shape vector for a time window: the 10 players with the most touches
+    (at least `min_touches` each) in lo <= t < hi. Goalkeepers must already
+    be excluded by the caller."""
+    t, player = np.asarray(t, float), np.asarray(player)
+    x, y = np.asarray(x, float), np.asarray(y, float)
+    keep = (t >= lo) & (t < hi) & np.isfinite(x) & np.isfinite(y)
+    ids, counts = np.unique(player[keep], return_counts=True)
+    ok = counts >= min_touches
+    if ok.sum() < N_OUTFIELD:
+        return None
+    top = ids[ok][np.argsort(-counts[ok], kind="stable")[:N_OUTFIELD]]
+    cents = {p: (float(x[keep & (player == p)].mean()), float(y[keep & (player == p)].mean()))
+             for p in top}
+    return shape_vector(cents)
+
+
 def balanced_accuracy(y_true, y_pred) -> float:
     y_true, y_pred = np.asarray(y_true), np.asarray(y_pred)
     recalls = [float((y_pred[y_true == c] == c).mean()) for c in np.unique(y_true)]

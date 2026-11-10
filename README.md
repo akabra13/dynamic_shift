@@ -159,7 +159,21 @@ That verdict stands, but the figure is misleading. The back-line classes are 4 (
 - **It is not recognising teams.** Grouping by team (no team in both training and test) scores the same as grouping by match (0.766 vs 0.771).
 - **The v2 inference is confirmed:** back-five recall was 0 (6 and 2 examples), which is what pulled the three-class figure down to 0.51.
 - **Honest limits:** back threes are about 1 in 5 segments, so when the model says "back three" it is right only about half the time (lockbox: 392 of 800). Forward count (1, 2 or 3) is not recognised (0.47-0.49 vs chance 0.33, below the bar). Segments are at least 10 minutes long and use the ten lineup outfield players, so this is a segment classifier, not yet a minute-by-minute detector.
-- **Next (v2c, to be pre-registered):** within a match, does a flip in the predicted back line over sliding windows mark the labelled 4-to-3 and 3-to-4 switches, compared with random moments and same-formation shifts?
+- **Next (v2c, pre-registered below):** within a match, does a change in the predicted back line mark the labelled 4-to-3 and 3-to-4 switches?
+
+## Pre-registered v2c: does the back-line classifier see a switch happen? (written 2026-11-10, before running)
+
+v2b classifies whole segments. v2c asks the detector question: around a moment, does the predicted back line change?
+
+- **Window classifier** (`formation.window_vector`, `scripts/run_flip_check.py`). Training windows are 900 s windows inside labelled segments of at least 1,800 s, up to 3 per segment at random positions, labelled back three or back four. Features as v2b, but a window uses the 10 outfield players with the most touches (at least 3 each), since a 900 s window does not give every lineup player 5. Same gradient-boosting model.
+- **Moment score:** `flip` = |P(back three) in the 900 s after − P(back three) in the 900 s before|, both windows complete and on the continuous two-half clock.
+- **No leakage:** the probability for a moment comes from a model trained without that moment's team. Teams are split into 5 folds by a hash of the team key.
+- **Classes:** `back_switch` = labelled formation change whose back line goes 3 to 4 or 4 to 3; `other_change` = labelled change with the same back line; `same_formation`; and 5 `random` moments per team-match.
+- **Pass bar, both required (development seasons):**
+  1. AUC of `back_switch` vs `random` at least 0.70, 95% bootstrap-by-team-match CI lower end above 0.5;
+  2. AUC of `back_switch` vs `same_formation` at least 0.65, CI lower end above 0.5. This second condition is the one v2 Test A failed: it requires the score to react to a back-line switch, not just to any logged tactical event.
+- **Descriptive:** `other_change` and `same_formation` vs `random`; the share of `back_switch` moments whose predicted back line actually crosses 0.5 in the right direction.
+- **Confirmation:** if development passes, train on all development windows and score the lockbox seasons once, same bars. **Disclosed:** the lockbox seasons were used once already, for v2b's segment classifier score; this statistic has never been computed on them.
 
 ## Scope note on the detector as implemented
 
