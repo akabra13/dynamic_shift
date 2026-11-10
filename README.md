@@ -146,6 +146,21 @@ That verdict stands, but the figure is misleading. The back-line classes are 4 (
 - **Then the lockbox, once:** trained on all development seasons, scored on the lockbox seasons. Passes if balanced accuracy is at least 0.70 and the CI lower end is above 0.60. Only a lockbox pass counts as a positive result.
 - If both pass, v2c (specified only then) asks whether a flip in the predicted back line marks labelled 4-to-3 and 3-to-4 switches within a match.
 
+### Result v2b (2026-11-10): PASS on development and on the lockbox
+
+| | Development (grouped by team) | Lockbox (trained on development, scored once) |
+|---|---|---|
+| Segments (back 3 / back 4) | 11,762 (1,692 / 10,070) | 2,639 (536 / 2,103) |
+| **Balanced accuracy** (95% CI) | **0.766** (0.747-0.785) | **0.769** (0.742-0.796) |
+| Recall: back three / back four | 0.60 / 0.93 | 0.73 / 0.81 |
+| Bar | 0.70, lower end > 0.65: pass | 0.70, lower end > 0.60: pass |
+
+- **Where players touch the ball tells a back three from a back four** about 77% of the time (balanced; chance 50%), in seasons the model never saw while it was chosen.
+- **It is not recognising teams.** Grouping by team (no team in both training and test) scores the same as grouping by match (0.766 vs 0.771).
+- **The v2 inference is confirmed:** back-five recall was 0 (6 and 2 examples), which is what pulled the three-class figure down to 0.51.
+- **Honest limits:** back threes are about 1 in 5 segments, so when the model says "back three" it is right only about half the time (lockbox: 392 of 800). Forward count (1, 2 or 3) is not recognised (0.47-0.49 vs chance 0.33, below the bar). Segments are at least 10 minutes long and use the ten lineup outfield players, so this is a segment classifier, not yet a minute-by-minute detector.
+- **Next (v2c, to be pre-registered):** within a match, does a flip in the predicted back line over sliding windows mark the labelled 4-to-3 and 3-to-4 switches, compared with random moments and same-formation shifts?
+
 ## Scope note on the detector as implemented
 
 The design doc models each zone row as its own conditional multinomial (a full team chain). What's implemented and tested here is a flattened version: one Dirichlet-multinomial over all (zone, outcome) categories together. This is an honest simplification, not the final per-row conditional model the design doc describes.
