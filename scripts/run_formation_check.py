@@ -27,9 +27,10 @@ from dynamic_shift.positions import MIN_TOUCHES, centroids, elapsed  # noqa: E40
 from dynamic_shift.split import is_lockbox  # noqa: E402
 
 MIN_SEGMENT_SECONDS = 600.0
-TARGETS = ("back_line", "forwards")
-PASS_BA = 0.60
-PASS_LOWER = 0.40
+TARGETS = ("back_line", "forwards", "back3_vs_4")
+PASS = {"back_line": (0.60, 0.40), "forwards": (0.60, 0.40),
+        "back3_vs_4": (0.70, 0.65)}          # v2b; lockbox lower bound is 0.60
+LOCKBOX_LOWER = {"back3_vs_4": 0.60}
 N_BOOT = 500
 
 
@@ -89,7 +90,7 @@ if __name__ == "__main__":
     seasons = seasons.with_columns(box=pl.col("key").map_elements(is_lockbox, return_dtype=pl.Boolean))
 
     t0 = time.time()
-    X, Y, G, BOX = [], {k: [] for k in TARGETS}, [], []
+    X, Y, G, TEAM, BOX = [], {k: [] for k in TARGETS}, [], [], []
     for row in seasons.iter_rows(named=True):
         ev = (lake.events().filter((pl.col("competition_id") == row["competition_id"])
                                    & (pl.col("season_id") == row["season_id"]))
@@ -103,32 +104,45 @@ if __name__ == "__main__":
             for team_id in me["team_id"].drop_nulls().unique().to_list():
                 for form, vec in segments(me, team_id, t_all, end, p1_end):
                     X.append(vec); G.append(match_id); BOX.append(row["box"])
-                    for k in TARGETS:
-                        Y[k].append(form[k])
+                    TEAM.append(f"{row['key']}_{team_id}")
+                    Y["back_line"].append(form["back_line"])
+                    Y["forwards"].append(form["forwards"])
+                    Y["back3_vs_4"].append(form["back_line"] if form["back_line"] in (3, 4) else -1)
 
-    X, G, BOX = np.array(X), np.array(G), np.array(BOX)
+    X, G, TEAM, BOX = np.array(X), np.array(G), np.array(TEAM), np.array(BOX)
     print(f"\nsegments: dev {int((~BOX).sum())}, lockbox {int(BOX.sum())}")
     results = {"split": args.split, "targets": {}}
     for k in TARGETS:
-        y = np.array(Y[k])
-        dev = ~BOX
-        if args.split == "dev":
-            idx, pred = np.flatnonzero(dev), np.empty(dev.sum(), dtype=y.dtype)
-            for tr, te in GroupKFold(5).split(X[dev], y[dev], G[dev]):
-                pred[te] = model().fit(X[dev][tr], y[dev][tr]).predict(X[dev][te])
-            yt, gt = y[dev], G[dev]
-        else:
-            pred = model().fit(X[dev], y[dev]).predict(X[BOX])
-            yt, gt = y[BOX], G[BOX]
-        ba = balanced_accuracy(yt, pred)
-        lo, hi = boot_ba(yt, pred, gt, rng)
-        classes, counts = np.unique(yt, return_counts=True)
-        results["targets"][k] = {
-            "n": int(len(yt)), "balanced_accuracy": round(ba, 4), "ci95": [round(lo, 4), round(hi, 4)],
-            "chance": round(1 / len(classes), 4),
-            "class_counts": {int(c): int(n) for c, n in zip(classes, counts)},
-            "passes_bar": bool(ba >= PASS_BA and lo > PASS_LOWER)}
-        print(f"{k:10s} n={len(yt)} BA={ba:.3f} (95% CI {lo:.3f}-{hi:.3f}) chance={1/len(classes):.3f}"
-              + ("   PASSES BAR" if results["targets"][k]["passes_bar"] else ""))
+        y_all = np.array(Y[k])
+        use = y_all != -1
+        # v2b (back3_vs_4) is grouped by team; v2 targets keep their registered match grouping.
+        settings = [("team", TEAM), ("match", G)] if k == "back3_vs_4" else [("match", G)]
+        results["targets"][k] = {}
+        for gname, groups in settings:
+            dev, box = use & ~BOX, use & BOX
+            if args.split == "dev":
+                pred = np.empty(dev.sum(), dtype=y_all.dtype)
+                for tr, te in GroupKFold(5).split(X[dev], y_all[dev], groups[dev]):
+                    pred[te] = model().fit(X[dev][tr], y_all[dev][tr]).predict(X[dev][te])
+                yt, gt = y_all[dev], groups[dev]
+            else:
+                pred = model().fit(X[dev], y_all[dev]).predict(X[box])
+                yt, gt = y_all[box], groups[box]
+            ba = balanced_accuracy(yt, pred)
+            lo, hi = boot_ba(yt, pred, gt, rng)
+            classes, counts = np.unique(yt, return_counts=True)
+            conf = {int(a): {int(b): int(((yt == a) & (pred == b)).sum()) for b in classes} for a in classes}
+            recall = {int(c): round(float((pred[yt == c] == c).mean()), 4) for c in classes}
+            bar_ba, bar_lo = PASS[k]
+            if args.split == "lockbox":
+                bar_lo = LOCKBOX_LOWER.get(k, bar_lo)
+            primary = gname == settings[0][0]
+            passed = bool(primary and ba >= bar_ba and lo > bar_lo)
+            results["targets"][k][gname] = {
+                "n": int(len(yt)), "balanced_accuracy": round(ba, 4), "ci95": [round(lo, 4), round(hi, 4)],
+                "chance": round(1 / len(classes), 4), "class_counts": {int(c): int(n) for c, n in zip(classes, counts)},
+                "recall": recall, "confusion": conf, "primary": primary, "passes_bar": passed}
+            print(f"{k:11s} grouped by {gname:5s} n={len(yt)} BA={ba:.3f} (95% CI {lo:.3f}-{hi:.3f}) "
+                  f"recall={recall}" + ("   PASSES BAR" if passed else ""))
     Path("formation_check_results.json").write_text(json.dumps(results, indent=1), encoding="utf-8")
     print(f"\ndone in {time.time() - t0:.0f}s")

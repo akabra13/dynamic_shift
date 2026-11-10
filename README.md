@@ -131,7 +131,20 @@ Composites need all 8 phase-split features, so 301 labelled events shrank to 164
 
 The registered rule says `same_formation` must stay near 0.5 or the result is distrusted. It sits at 0.62-0.64, at or above the real changes. So what separates these moments from random ones is not a formation change: players move about more around *any* logged tactical event (substitutions, injuries, restarts) than at an arbitrary moment. Verdict: **no evidence that position change identifies a formation change.** Lockbox not run.
 
-**Test B (formation recognition).** Fails. Back line: balanced accuracy 0.506 (95% CI 0.497-0.514) against the 0.60 bar, chance 0.33; n = 11,768 segments, but the classes are 4 (10,070), 3 (1,692) and 5 (6), so the 3-class balanced figure is close to a 2-class problem. Forwards: 0.486 (0.477-0.495). Where players touch the ball does not recover the formation label, even though the label is a clear fact about the lineup. Lockbox not run.
+**Test B (formation recognition).** Fails the registered bar. Back line: balanced accuracy 0.506 (95% CI 0.497-0.514) against 0.60, chance 0.33. Forwards: 0.486 (0.477-0.495). Lockbox not run.
+
+That verdict stands, but the figure is misleading. The back-line classes are 4 (10,070), 3 (1,692) and **5 (6)**. Balanced accuracy averages the three recalls, and a class with 6 examples is almost certainly scored near 0, so the figure is consistent with about 0.76 on the real question, back three vs back four (chance 0.5). The run did not save per-class results, so this is an inference, not a measurement. It is followed up below as a new pre-registered test, disclosed as chosen after seeing this result.
+
+## Pre-registered v2b: back three vs back four (written 2026-11-10, after seeing v2 Test B, before running this)
+
+**Disclosed forking path:** this test was chosen because of the v2 Test B arithmetic above. The lockbox seasons, untouched so far, are what make it a fair test.
+
+- Same segments, features and model as v2 Test B; only segments whose formation has a back line of 3 or 4.
+- **Primary:** balanced accuracy for back three vs back four, 5-fold cross-validation **grouped by team** (key and team id), so a team's segments are never in both training and test data. That stops the model passing just by recognising teams that always play a back three.
+- Also reported (descriptive): the same with grouping by match (the v2 setting), confusion matrices for every target, and per-class recall.
+- **Pass bar on development seasons:** balanced accuracy at least 0.70 and the lower end of the 95% bootstrap-by-team CI above 0.65.
+- **Then the lockbox, once:** trained on all development seasons, scored on the lockbox seasons. Passes if balanced accuracy is at least 0.70 and the CI lower end is above 0.60. Only a lockbox pass counts as a positive result.
+- If both pass, v2c (specified only then) asks whether a flip in the predicted back line marks labelled 4-to-3 and 3-to-4 switches within a match.
 
 ## Scope note on the detector as implemented
 
