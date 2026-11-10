@@ -119,6 +119,20 @@ Composites need all 8 phase-split features, so 301 labelled events shrank to 164
 
 **Decision rule.** If A or B passes on the development seasons, rerun once on the lockbox. If it passes there too, rebuild the product on that observable and build `export.py` as a match timeline. If both fail on development, stop for good and publish the combined negative result. Either way it is written up.
 
+### v2 development result (2026-11-09, run exactly as registered)
+
+**Test A (position change).** On the numeric bar it passes, but the registered control invalidates it.
+
+| Class | disp_rel AUC (98.3% CI) | order_flip AUC (98.3% CI) |
+|---|---|---|
+| real_substantive (n=1,728) | 0.625 (0.608-0.641) | 0.613 (0.596-0.629) |
+| real_clean (n=318) | 0.621 (0.582-0.658) | 0.631 (0.595-0.670) |
+| **same_formation, negative control (n=4,887)** | **0.636 (0.627-0.647)** | **0.624 (0.614-0.635)** |
+
+The registered rule says `same_formation` must stay near 0.5 or the result is distrusted. It sits at 0.62-0.64, at or above the real changes. So what separates these moments from random ones is not a formation change: players move about more around *any* logged tactical event (substitutions, injuries, restarts) than at an arbitrary moment. Verdict: **no evidence that position change identifies a formation change.** Lockbox not run.
+
+**Test B (formation recognition).** Fails. Back line: balanced accuracy 0.506 (95% CI 0.497-0.514) against the 0.60 bar, chance 0.33; n = 11,768 segments, but the classes are 4 (10,070), 3 (1,692) and 5 (6), so the 3-class balanced figure is close to a 2-class problem. Forwards: 0.486 (0.477-0.495). Where players touch the ball does not recover the formation label, even though the label is a clear fact about the lineup. Lockbox not run.
+
 ## Scope note on the detector as implemented
 
 The design doc models each zone row as its own conditional multinomial (a full team chain). What's implemented and tested here is a flattened version: one Dirichlet-multinomial over all (zone, outcome) categories together. This is an honest simplification, not the final per-row conditional model the design doc describes.
